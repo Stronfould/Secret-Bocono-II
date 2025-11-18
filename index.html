@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SECRET BOCONO PARTE II</title>
+    <!-- Firebase compatible con GitHub Pages -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -77,6 +81,11 @@
             background-color: #555;
         }
         
+        button:disabled {
+            background-color: #222;
+            cursor: not-allowed;
+        }
+        
         .messages {
             margin-top: 30px;
         }
@@ -91,6 +100,8 @@
         
         .message-content {
             margin-bottom: 10px;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
         
         .message-meta {
@@ -169,6 +180,12 @@
             animation: fadeInOut 3s ease-in-out;
         }
         
+        .loading {
+            text-align: center;
+            color: #aaa;
+            padding: 20px;
+        }
+        
         @keyframes fadeInOut {
             0% { opacity: 0; }
             10% { opacity: 1; }
@@ -181,16 +198,18 @@
     <div class="container">
         <header>
             <h1>SECRET BOCONO PARTE II</h1>
-            <p class="subtitle">Comparte tus pensamientos de forma anónima</p>
+            <p class="subtitle">Mensajes anónimos en tiempo real</p>
         </header>
         
         <div class="message-form">
             <textarea id="messageInput" placeholder="Escribe tu mensaje anónimo aquí..."></textarea>
-            <button id="submitMessage">Publicar</button>
+            <button id="submitMessage">Publicar Mensaje</button>
         </div>
         
         <div class="messages" id="messagesContainer">
-            <!-- Los mensajes se cargarán aquí -->
+            <div class="loading" id="loadingMessages">
+                Cargando mensajes...
+            </div>
         </div>
     </div>
     
@@ -199,35 +218,19 @@
     </div>
 
     <script>
-        // Datos de ejemplo para mostrar cómo funciona
-        let messages = [
-            {
-                id: 1,
-                content: "Este es un mensaje de ejemplo. ¡La página funciona correctamente!",
-                timestamp: new Date().getTime(),
-                replies: [
-                    {
-                        id: 101,
-                        content: "¡Excelente! Me encanta esta idea.",
-                        timestamp: new Date().getTime() + 1000
-                    }
-                ]
-            }
-        ];
+        // 🔥 CONFIGURACIÓN FIREBASE - REEMPLAZA CON TUS DATOS
+        const firebaseConfig = {
+            apiKey: "AIzaSyAjKopYxknbSYWFHSjhydu7yMCUn-KIswI",
+            authDomain: "secret-bocono-ii.firebaseapp.com",
+            projectId: "secret-bocono-ii",
+            storageBucket: "secret-bocono-ii.firebasestorage.app",
+            messagingSenderId: "965252056100",
+            appId: "1:965252056100:web:2e8180f547d8004befc4b1"
+        };
 
-        // Cargar mensajes del localStorage si existen
-        function loadMessages() {
-            const savedMessages = localStorage.getItem('secretBoconoMessages');
-            if (savedMessages) {
-                messages = JSON.parse(savedMessages);
-            }
-            renderMessages();
-        }
-
-        // Guardar mensajes en localStorage
-        function saveMessages() {
-            localStorage.setItem('secretBoconoMessages', JSON.stringify(messages));
-        }
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
         // Mostrar notificación
         function showNotification(text) {
@@ -239,46 +242,45 @@
             }, 3000);
         }
 
-        // Renderizar mensajes en la página
-        function renderMessages() {
+        // Renderizar mensajes
+        function renderMessages(messages) {
             const container = document.getElementById('messagesContainer');
-            container.innerHTML = '';
+            
+            if (messages.length === 0) {
+                container.innerHTML = '<div class="loading">No hay mensajes aún. ¡Sé el primero en publicar!</div>';
+                return;
+            }
             
             // Ordenar mensajes por fecha (más recientes primero)
             const sortedMessages = [...messages].sort((a, b) => b.timestamp - a.timestamp);
             
-            sortedMessages.forEach(message => {
-                const messageElement = document.createElement('div');
-                messageElement.className = 'message';
-                messageElement.dataset.id = message.id;
-                
+            container.innerHTML = sortedMessages.map(message => {
                 const messageDate = new Date(message.timestamp);
                 const formattedDate = messageDate.toLocaleDateString() + ' ' + messageDate.toLocaleTimeString();
                 
-                messageElement.innerHTML = `
-                    <div class="message-content">${escapeHtml(message.content)}</div>
-                    <div class="message-meta">
-                        <span>Anónimo • ${formattedDate}</span>
-                        <button class="reply-btn" onclick="toggleReplyForm(${message.id})">Responder</button>
-                    </div>
-                    <div class="reply-form" id="replyForm-${message.id}">
-                        <textarea class="reply-input" placeholder="Escribe tu respuesta..."></textarea>
-                        <button class="reply-submit" onclick="submitReply(${message.id})">Enviar</button>
-                    </div>
-                    <div class="replies" id="replies-${message.id}">
-                        ${renderReplies(message.replies)}
+                return `
+                    <div class="message" data-id="${message.id}">
+                        <div class="message-content">${escapeHtml(message.content)}</div>
+                        <div class="message-meta">
+                            <span>Anónimo • ${formattedDate}</span>
+                            <button class="reply-btn" onclick="toggleReplyForm('${message.id}')">Responder</button>
+                        </div>
+                        <div class="reply-form" id="replyForm-${message.id}">
+                            <textarea class="reply-input" placeholder="Escribe tu respuesta..."></textarea>
+                            <button class="reply-submit" onclick="submitReply('${message.id}')">Enviar Respuesta</button>
+                        </div>
+                        <div class="replies" id="replies-${message.id}">
+                            ${renderReplies(message.replies || [])}
+                        </div>
                     </div>
                 `;
-                
-                container.appendChild(messageElement);
-            });
+            }).join('');
         }
 
         // Renderizar respuestas
         function renderReplies(replies) {
-            if (!replies || replies.length === 0) return '';
+            if (replies.length === 0) return '';
             
-            // Ordenar respuestas por fecha (más antiguas primero)
             const sortedReplies = [...replies].sort((a, b) => a.timestamp - b.timestamp);
             
             return sortedReplies.map(reply => {
@@ -296,14 +298,33 @@
             }).join('');
         }
 
-        // Alternar visibilidad del formulario de respuesta
-        function toggleReplyForm(messageId) {
-            const replyForm = document.getElementById(`replyForm-${messageId}`);
-            replyForm.classList.toggle('active');
+        // Escuchar mensajes en tiempo real
+        function listenToMessages() {
+            return db.collection('messages')
+                .orderBy('timestamp', 'desc')
+                .onSnapshot(snapshot => {
+                    const loadingElement = document.getElementById('loadingMessages');
+                    if (loadingElement) loadingElement.remove();
+                    
+                    const messages = [];
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        messages.push({
+                            id: doc.id,
+                            content: data.content,
+                            timestamp: data.timestamp?.toDate().getTime() || Date.now(),
+                            replies: data.replies || []
+                        });
+                    });
+                    renderMessages(messages);
+                }, error => {
+                    console.error('Error cargando mensajes:', error);
+                    showNotification('Error cargando mensajes');
+                });
         }
 
-        // Enviar un nuevo mensaje
-        document.getElementById('submitMessage').addEventListener('click', function() {
+        // Enviar nuevo mensaje
+        document.getElementById('submitMessage').addEventListener('click', async function() {
             const messageInput = document.getElementById('messageInput');
             const content = messageInput.value.trim();
             
@@ -312,23 +333,36 @@
                 return;
             }
             
-            const newMessage = {
-                id: Date.now(),
-                content: content,
-                timestamp: new Date().getTime(),
-                replies: []
-            };
+            const button = this;
+            button.disabled = true;
+            button.textContent = 'Publicando...';
             
-            messages.push(newMessage);
-            saveMessages();
-            renderMessages();
-            
-            messageInput.value = '';
-            showNotification('Mensaje publicado correctamente');
+            try {
+                await db.collection('messages').add({
+                    content: content,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    replies: []
+                });
+                
+                messageInput.value = '';
+                showNotification('Mensaje publicado correctamente');
+            } catch (error) {
+                console.error('Error publicando mensaje:', error);
+                showNotification('Error al publicar mensaje');
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Publicar Mensaje';
+            }
         });
 
-        // Enviar una respuesta
-        function submitReply(messageId) {
+        // Alternar formulario de respuesta
+        function toggleReplyForm(messageId) {
+            const replyForm = document.getElementById(`replyForm-${messageId}`);
+            replyForm.classList.toggle('active');
+        }
+
+        // Enviar respuesta
+        async function submitReply(messageId) {
             const replyInput = document.querySelector(`#replyForm-${messageId} .reply-input`);
             const content = replyInput.value.trim();
             
@@ -337,43 +371,48 @@
                 return;
             }
             
-            const message = messages.find(m => m.id === messageId);
-            if (message) {
-                const newReply = {
-                    id: Date.now(),
-                    content: content,
-                    timestamp: new Date().getTime()
-                };
+            try {
+                const messageRef = db.collection('messages').doc(messageId);
+                const messageDoc = await messageRef.get();
                 
-                if (!message.replies) {
-                    message.replies = [];
+                if (messageDoc.exists) {
+                    const currentReplies = messageDoc.data().replies || [];
+                    const newReply = {
+                        content: content,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    
+                    await messageRef.update({
+                        replies: [...currentReplies, newReply]
+                    });
+                    
+                    replyInput.value = '';
+                    showNotification('Respuesta enviada');
                 }
-                
-                message.replies.push(newReply);
-                saveMessages();
-                renderMessages();
-                
-                replyInput.value = '';
-                showNotification('Respuesta enviada');
+            } catch (error) {
+                console.error('Error enviando respuesta:', error);
+                showNotification('Error al enviar respuesta');
             }
         }
 
-        // Función para escapar HTML y prevenir XSS
+        // Función para escapar HTML
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
 
-        // Permitir enviar mensaje con Enter (Ctrl+Enter)
+        // Permitir enviar mensaje con Ctrl+Enter
         document.getElementById('messageInput').addEventListener('keydown', function(e) {
             if (e.ctrlKey && e.key === 'Enter') {
                 document.getElementById('submitMessage').click();
             }
         });
 
-        // Cargar mensajes al iniciar
-        document.addEventListener('DOMContentLoaded', loadMessages);
+        // Inicializar cuando la página cargue
+        document.addEventListener('DOMContentLoaded', function() {
+            listenToMessages();
+        });
     </script>
 </body>
 </html>
