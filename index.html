@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SECRET BOCONO PARTE II</title>
-    <!-- Firebase compatible con GitHub Pages -->
+    <!-- Firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
     
@@ -218,7 +218,7 @@
     </div>
 
     <script>
-        // 🔥 CONFIGURACIÓN FIREBASE - REEMPLAZA CON TUS DATOS
+        // 🔥 CONFIGURACIÓN FIREBASE
         const firebaseConfig = {
             apiKey: "AIzaSyAjKopYxknbSYWFHSjhydu7yMCUn-KIswI",
             authDomain: "secret-bocono-ii.firebaseapp.com",
@@ -233,9 +233,10 @@
         const db = firebase.firestore();
 
         // Mostrar notificación
-        function showNotification(text) {
+        function showNotification(text, isError = false) {
             const notification = document.getElementById('notification');
             notification.textContent = text;
+            notification.style.backgroundColor = isError ? '#550000' : '#333';
             notification.classList.add('show');
             setTimeout(() => {
                 notification.classList.remove('show');
@@ -319,7 +320,7 @@
                     renderMessages(messages);
                 }, error => {
                     console.error('Error cargando mensajes:', error);
-                    showNotification('Error cargando mensajes');
+                    showNotification('Error cargando mensajes', true);
                 });
         }
 
@@ -329,7 +330,7 @@
             const content = messageInput.value.trim();
             
             if (content === '') {
-                showNotification('Por favor, escribe un mensaje');
+                showNotification('Por favor, escribe un mensaje', true);
                 return;
             }
             
@@ -348,7 +349,7 @@
                 showNotification('Mensaje publicado correctamente');
             } catch (error) {
                 console.error('Error publicando mensaje:', error);
-                showNotification('Error al publicar mensaje');
+                showNotification('Error al publicar mensaje', true);
             } finally {
                 button.disabled = false;
                 button.textContent = 'Publicar Mensaje';
@@ -361,37 +362,47 @@
             replyForm.classList.toggle('active');
         }
 
-        // Enviar respuesta
+        // Enviar respuesta - FUNCIÓN CORREGIDA
         async function submitReply(messageId) {
             const replyInput = document.querySelector(`#replyForm-${messageId} .reply-input`);
             const content = replyInput.value.trim();
             
             if (content === '') {
-                showNotification('Por favor, escribe una respuesta');
+                showNotification('Por favor, escribe una respuesta', true);
                 return;
             }
             
             try {
                 const messageRef = db.collection('messages').doc(messageId);
+                
+                // Obtener el mensaje actual
                 const messageDoc = await messageRef.get();
                 
-                if (messageDoc.exists) {
-                    const currentReplies = messageDoc.data().replies || [];
-                    const newReply = {
-                        content: content,
-                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-                    };
-                    
-                    await messageRef.update({
-                        replies: [...currentReplies, newReply]
-                    });
-                    
-                    replyInput.value = '';
-                    showNotification('Respuesta enviada');
+                if (!messageDoc.exists) {
+                    showNotification('El mensaje no existe', true);
+                    return;
                 }
+                
+                const currentData = messageDoc.data();
+                const currentReplies = currentData.replies || [];
+                
+                // Crear nueva respuesta
+                const newReply = {
+                    content: content,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                
+                // Actualizar el documento
+                await messageRef.update({
+                    replies: [...currentReplies, newReply]
+                });
+                
+                replyInput.value = '';
+                showNotification('Respuesta enviada correctamente');
+                
             } catch (error) {
                 console.error('Error enviando respuesta:', error);
-                showNotification('Error al enviar respuesta');
+                showNotification('Error al enviar respuesta: ' + error.message, true);
             }
         }
 
